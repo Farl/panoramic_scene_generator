@@ -1,0 +1,52 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panoramic Scene Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Panoramic Scene Generator</h1>
+        
+        <div class="controls">
+            <label for="prompt">Describe your panorama:</label>
+            <input type="text" id="prompt" placeholder="A serene mountain landscape with a lake and forest" value="A serene mountain landscape with a lake and forest">
+
+            <label for="imageModelSelect">Pollinations image model:</label>
+            <select id="imageModelSelect">
+                <option value="flux">flux</option>
+                <option value="kontext">kontext</option>
+                <option value="gptimage">gptimage</option>
+            </select>
+            
+            <div class="buttons">
+                <button id="generateBtn">Generate Panorama</button>
+                <button id="retryBtn" class="secondary">Try Another Seed</button>
+                <button id="toggleOverlayBtn" class="secondary">Toggle Grid Overlay</button>
+            </div>
+            
+            <div id="status-message" class="status-message hidden"></div>
+        </div>
+        
+        <div class="viewer-container">
+            <div id="loading" class="hidden">
+                <div class="spinner"></div>
+                <p>Generating your panorama...</p>
+            </div>
+            <div id="viewer"></div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.151.3/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.151.3/examples/jsm/"
+            }
+        }
+    </script>
+    <script src="config.js"></script>
+    <script src="script.js" type="module"></script>
+</body>
+</html>
