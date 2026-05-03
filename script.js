@@ -40,6 +40,72 @@ function buildPanoramaPrompt(userPrompt) {
     return `Equirectangular 360-degree panorama of ${userPrompt}. Full wrap-around spherical image with consistent horizon.`;
 }
 
+const POLLINATIONS_IMAGE_MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models';
+const FALLBACK_IMAGE_MODELS = [
+    { value: 'flux', label: 'flux' },
+    { value: 'kontext', label: 'kontext' },
+    { value: 'gptimage', label: 'gptimage' }
+];
+
+function dedupeModels(models) {
+    const seen = new Set();
+    return models.filter(model => {
+        if (!model?.value || seen.has(model.value)) {
+            return false;
+        }
+        seen.add(model.value);
+        return true;
+    });
+}
+
+async function fetchImageModels() {
+    try {
+        const response = await fetchWithTimeout(POLLINATIONS_IMAGE_MODELS_ENDPOINT);
+        const catalog = await response.json();
+
+        if (!Array.isArray(catalog)) {
+            throw new Error('Unexpected image model response.');
+        }
+
+        const models = catalog
+            .filter(model => model.paid_only !== true)
+            .filter(model => {
+                const modalities = Array.isArray(model.output_modalities) ? model.output_modalities : [];
+                return modalities.includes('image') && !modalities.includes('video');
+            })
+            .map(model => ({
+                value: model.name,
+                label: model.name
+            }));
+
+        const deduped = dedupeModels(models);
+        return deduped.length ? deduped : FALLBACK_IMAGE_MODELS;
+    } catch (error) {
+        console.warn('Failed to fetch Pollinations image models. Using fallback list.', error);
+        return FALLBACK_IMAGE_MODELS;
+    }
+}
+
+function populateModelSelect(selectElement, models, defaultValue) {
+    selectElement.innerHTML = '';
+    models.forEach(({ value, label }) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        if (value === defaultValue) {
+            option.selected = true;
+        }
+        selectElement.appendChild(option);
+    });
+}
+
+function resolveSelectedModel(models, preferredValue) {
+    if (models.some(model => model.value === preferredValue)) {
+        return preferredValue;
+    }
+    return models[0]?.value || preferredValue;
+}
+
 function getImageConfigurationError() {
     const config = getConfig();
     const provider = getImageProvider();
@@ -585,7 +651,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const config = getConfig();
     const imageModelSelect = document.getElementById('imageModelSelect');
     if (imageModelSelect) {
-        imageModelSelect.value = config.POLLINATIONS_IMAGE_MODEL;
+        const preferredModel = config.POLLINATIONS_IMAGE_MODEL || 'flux';
+        populateModelSelect(imageModelSelect, [{ value: preferredModel, label: 'Loading...' }], preferredModel);
+
+        fetchImageModels()
+            .then(models => {
+                const selected = resolveSelectedModel(models, preferredModel);
+                populateModelSelect(imageModelSelect, models, selected);
+                window.PANORAMIC_SCENE_CONFIG = {
+                    ...(window.PANORAMIC_SCENE_CONFIG || {}),
+                    POLLINATIONS_IMAGE_MODEL: selected
+                };
+            })
+            .catch(() => {
+                // Keep placeholder option on fetch failure.
+            });
     }
     new PanoramaViewer();
 });
