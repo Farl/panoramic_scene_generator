@@ -37,14 +37,23 @@ function generateSeed() {
 }
 
 function buildPanoramaPrompt(userPrompt) {
-    return `Equirectangular 360-degree panorama of ${userPrompt}. Full wrap-around spherical image with consistent horizon.`;
+    return (
+        `Equirectangular 360×180 degree spherical panorama of ${userPrompt}. ` +
+        `Formatted as an equirectangular projection: the left edge and the right edge must match perfectly and tile seamlessly with no visible seam. ` +
+        `The horizon sits at the vertical midpoint. ` +
+        `Uniform, consistent lighting and color temperature across the entire image. ` +
+        `Wide immersive environment captured from the center of the scene. ` +
+        `No borders, no vignetting, no text, no watermarks.`
+    );
 }
 
 const POLLINATIONS_IMAGE_MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models';
 const FALLBACK_IMAGE_MODELS = [
     { value: 'flux', label: 'flux' },
     { value: 'kontext', label: 'kontext' },
-    { value: 'gptimage', label: 'gptimage' }
+    { value: 'gptimage', label: 'gptimage (GPT Image 1 Mini)' },
+    { value: 'gptimage-large', label: 'gptimage-large (GPT Image 1.5)' },
+    { value: 'gpt-image-2', label: 'gpt-image-2 (GPT Image 2)' }
 ];
 
 function dedupeModels(models) {
@@ -173,11 +182,14 @@ async function generatePanoramaImageDataUrl(prompt, seed) {
     imageUrl.searchParams.set('model', model);
     imageUrl.searchParams.set('seed', String(seed));
 
-    // gptimage (DALL-E 3) only accepts fixed sizes; 1792×1024 is the widest
-    // landscape it supports. All other models accept arbitrary width/height so
-    // we use 2048×1024 for a true 2:1 equirectangular ratio.
-    if (model === 'gptimage') {
-        imageUrl.searchParams.set('width', '1792');
+    // Size selection is model-specific:
+    // - gptimage (GPT Image 1 Mini) / gptimage-large (GPT Image 1.5):
+    //   Only accept fixed OpenAI sizes. 1536×1024 is the widest landscape.
+    // - gpt-image-2: flexible size; 2048×1024 is valid (2:1 ratio, multiples
+    //   of 16, within pixel limits) and gives true equirectangular proportions.
+    // - flux / kontext / others: accept arbitrary dimensions; use 2048×1024.
+    if (model === 'gptimage' || model === 'gptimage-large') {
+        imageUrl.searchParams.set('width', '1536');
         imageUrl.searchParams.set('height', '1024');
     } else {
         imageUrl.searchParams.set('width', '2048');
