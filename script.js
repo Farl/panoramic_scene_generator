@@ -205,7 +205,8 @@ class PanoramaViewer {
         const viewerEl = document.getElementById('viewer');
         const initAspect = viewerEl.clientWidth / (viewerEl.clientHeight || 1) || 16 / 9;
         this.camera = new THREE.PerspectiveCamera(65, initAspect, 0.1, 1000);
-        this.camera.position.set(0, 0, 0);
+        // Small offset from origin so OrbitControls has a non-zero camera→target vector.
+        this.camera.position.set(0, 0, 0.01);
         
         // Setup renderer
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
