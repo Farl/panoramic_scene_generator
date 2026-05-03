@@ -171,6 +171,10 @@ async function generatePanoramaImageDataUrl(prompt, seed) {
     const imageUrl = new URL(`${baseUrl}/${encodeURIComponent(buildPanoramaPrompt(prompt))}`);
     imageUrl.searchParams.set('model', config.POLLINATIONS_IMAGE_MODEL);
     imageUrl.searchParams.set('seed', String(seed));
+    // Request 2:1 ratio required for equirectangular panorama projection.
+    imageUrl.searchParams.set('width', '2048');
+    imageUrl.searchParams.set('height', '1024');
+    imageUrl.searchParams.set('nologo', 'true');
 
     if (config.POLLINATIONS_API_KEY) {
         imageUrl.searchParams.set('key', config.POLLINATIONS_API_KEY);
@@ -196,9 +200,12 @@ class PanoramaViewer {
         // Setup three.js scene
         this.scene = new THREE.Scene();
         
-        // Setup camera (perspective for immersive view)
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(0, 0, 0.1); // Slightly offset from center
+        // Setup camera — aspect from viewer element to avoid distortion;
+        // FOV 65° reduces edge stretching vs 75°; camera at origin for a true spherical view.
+        const viewerEl = document.getElementById('viewer');
+        const initAspect = viewerEl.clientWidth / (viewerEl.clientHeight || 1) || 16 / 9;
+        this.camera = new THREE.PerspectiveCamera(65, initAspect, 0.1, 1000);
+        this.camera.position.set(0, 0, 0);
         
         // Setup renderer
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -225,6 +232,9 @@ class PanoramaViewer {
         this.controls.enableZoom = false;
         this.controls.enablePan = false;
         this.controls.rotateSpeed = 0.3;
+        // Clamp vertical look angle to avoid pole singularities and extreme distortion.
+        this.controls.minPolarAngle = Math.PI * 0.15; // ~27° from top
+        this.controls.maxPolarAngle = Math.PI * 0.85; // ~27° from bottom
         
         // Start animation loop
         this.animate();
