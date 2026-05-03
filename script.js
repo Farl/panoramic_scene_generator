@@ -384,31 +384,43 @@ class PanoramaViewer {
         // Get image data
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
-        
-        // Blend the left and right edges
-        const blendWidth = Math.floor(canvas.width * 0.02); // 2% of width for blending
-        
+        const source = new Uint8ClampedArray(data);
+
+        // Pick blend width based on how different the two seam edges are.
+        const edgeDiff = this.measureEdgeDifference(source, canvas.width, canvas.height);
+        const minBlendWidth = Math.max(2, Math.floor(canvas.width * 0.004));
+        const maxBlendWidth = Math.max(minBlendWidth + 1, Math.floor(canvas.width * 0.03));
+        const normalizedDiff = Math.max(0, Math.min(1, edgeDiff / 48));
+        const blendWidth = Math.max(
+            minBlendWidth,
+            Math.min(maxBlendWidth, Math.round(minBlendWidth + (maxBlendWidth - minBlendWidth) * normalizedDiff))
+        );
+
+        const smoothstep = (t) => t * t * (3 - 2 * t);
+
         for (let y = 0; y < canvas.height; y++) {
             for (let x = 0; x < blendWidth; x++) {
-                // Calculate blend factor (0 at the left edge, 1 at blendWidth pixels in)
-                const blendFactor = x / blendWidth;
-                
-                // Get pixel indices
-                const leftIdx = (y * canvas.width + x) * 4;
-                const rightIdx = (y * canvas.width + (canvas.width - blendWidth + x)) * 4;
-                const wrapIdx = (y * canvas.width + (x + canvas.width - blendWidth)) * 4;
-                
-                // Blend right edge with left edge (will be wrapped in texture mapping)
-                for (let c = 0; c < 4; c++) {
-                    data[rightIdx + c] = Math.round(
-                        data[rightIdx + c] * blendFactor + data[leftIdx + c] * (1 - blendFactor)
-                    );
-                    
-                    // Also blend the beginning pixels with the end
-                    data[leftIdx + c] = Math.round(
-                        data[leftIdx + c] * (1 - blendFactor) + data[wrapIdx + c] * blendFactor
-                    );
+                const leftX = x;
+                const rightX = canvas.width - 1 - x;
+                const leftIdx = (y * canvas.width + leftX) * 4;
+                const rightIdx = (y * canvas.width + rightX) * 4;
+
+                // Strong near the seam edge, fades to zero toward interior.
+                const t = blendWidth > 1 ? x / (blendWidth - 1) : 0;
+                const influence = smoothstep(1 - t);
+
+                for (let c = 0; c < 3; c++) {
+                    const left = source[leftIdx + c];
+                    const right = source[rightIdx + c];
+                    const avg = 0.5 * (left + right);
+
+                    data[leftIdx + c] = Math.round(left * (1 - influence) + avg * influence);
+                    data[rightIdx + c] = Math.round(right * (1 - influence) + avg * influence);
                 }
+
+                // Keep alpha channel stable and deterministic.
+                data[leftIdx + 3] = source[leftIdx + 3];
+                data[rightIdx + 3] = source[rightIdx + 3];
             }
         }
         
@@ -418,9 +430,27 @@ class PanoramaViewer {
         // Create a new texture from the processed canvas
         const processedTexture = new THREE.CanvasTexture(canvas);
         processedTexture.wrapS = THREE.RepeatWrapping; // Important for proper wrapping
+        processedTexture.wrapT = THREE.ClampToEdgeWrapping;
+        processedTexture.minFilter = THREE.LinearMipmapLinearFilter;
+        processedTexture.magFilter = THREE.LinearFilter;
+        processedTexture.generateMipmaps = true;
         processedTexture.needsUpdate = true;
         
         return processedTexture;
+    }
+
+    measureEdgeDifference(data, width, height) {
+        let total = 0;
+        for (let y = 0; y < height; y++) {
+            const leftIdx = (y * width) * 4;
+            const rightIdx = (y * width + (width - 1)) * 4;
+
+            total += Math.abs(data[leftIdx] - data[rightIdx]);
+            total += Math.abs(data[leftIdx + 1] - data[rightIdx + 1]);
+            total += Math.abs(data[leftIdx + 2] - data[rightIdx + 2]);
+        }
+
+        return total / (height * 3);
     }
     
     addDebugGridOverlay() {
