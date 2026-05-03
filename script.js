@@ -169,12 +169,20 @@ async function generatePanoramaImageDataUrl(prompt, seed) {
 
     const baseUrl = normalizeBaseUrl(config.POLLINATIONS_IMAGE_BASE_URL);
     const imageUrl = new URL(`${baseUrl}/${encodeURIComponent(buildPanoramaPrompt(prompt))}`);
-    imageUrl.searchParams.set('model', config.POLLINATIONS_IMAGE_MODEL);
+    const model = config.POLLINATIONS_IMAGE_MODEL;
+    imageUrl.searchParams.set('model', model);
     imageUrl.searchParams.set('seed', String(seed));
-    // Request 2:1 ratio required for equirectangular panorama projection.
-    imageUrl.searchParams.set('width', '2048');
-    imageUrl.searchParams.set('height', '1024');
-    imageUrl.searchParams.set('nologo', 'true');
+
+    // gptimage (DALL-E 3) only accepts fixed sizes; 1792×1024 is the widest
+    // landscape it supports. All other models accept arbitrary width/height so
+    // we use 2048×1024 for a true 2:1 equirectangular ratio.
+    if (model === 'gptimage') {
+        imageUrl.searchParams.set('width', '1792');
+        imageUrl.searchParams.set('height', '1024');
+    } else {
+        imageUrl.searchParams.set('width', '2048');
+        imageUrl.searchParams.set('height', '1024');
+    }
 
     if (config.POLLINATIONS_API_KEY) {
         imageUrl.searchParams.set('key', config.POLLINATIONS_API_KEY);
